@@ -1,0 +1,192 @@
+/////////////////////////
+//script to grab render layer contents and make shaders in them refl/Spec only
+//This is to get a pass for JUST reflections in the environment to comp over proper beauty layers, etc.
+//This will take a render layer and override all color/ambient connections and swatches, but leave the refl/spec settings
+//OR you can copy the contents of a render layer and create a new render layer to do the above
+//NOTE: to self reflect colors from other objects in the scene you'll need to set up proper render PASSES, this won't do it
+//zeth willie - 2011 - zeth@catbuks.com
+/////////////////////////
+
+global proc zbw_reflectionPassMakerUI(string $reflection)
+{
+//UI setup
+if (`window -exists zbw_renderLayersUI`)
+{
+	deleteUI zbw_renderLayersUI;
+	windowPref -remove zbw_renderLayersUI;		
+    }
+string $window = `window -s 1 -tb 1 -rtf 1 -widthHeight 400 200 -title "zbw_reflectionPassMaker" zbw_renderLayersUI`;
+	columnLayout;
+	frameLayout -w 400 -cll 0 -cl 0 -ebg 1 -bgc 0 0 0 -label "Reflection Render Layer";
+		columnLayout;
+			checkBoxGrp -cal 1 left -en 1 -v1 0 -cw 1 225 -label "USE CURRENTLY SELECTED RENDER LAYER" -ann "USE CURRENT SELECTED LAYER" -cc "zbw_useCurrentReflect" zbw_useCurrentLayerReflectCB; 
+		setParent..;
+		frameLayout -en 1 -w 400 -bgc .1 .1 .2 -label "Create New Reflection RL" zbw_createNewReflectRLFrame;
+		columnLayout;
+		    textFieldGrp -label "New Reflection Layer Name" -tx $reflection zbw_reflectNewNameTFG;
+			columnLayout;
+				text "Choose the SOURCE renderLayer for objects/Lights";
+			setParent..;
+		setParent..;
+            rowColumnLayout -nc 3;	
+			radioCollection zbw_reflectSourceLayersRC;
+			string $RL[] = `ls -type "renderLayer"`;
+			int $sizeRL = size ($RL);
+			for ($z=0;$z<$sizeRL;$z++){
+				radioButton -label ($RL[$z]) ($RL[$z] + "RB");
+				}
+			string $layers[] = `radioCollection -q -cia zbw_reflectSourceLayersRC`;
+			radioCollection -e -select "defaultRenderLayerRB" zbw_reflectSourceLayersRC;
+			button -label "update render Layer List" -command "zbw_updateReflectSourceRL";
+			setParent..;
+		setParent..;
+		    button -h 50 -w 150 -bgc .25 0 .5 -label "Create Reflect Layer" -command "zbw_renderLayersRefl";	
+        setParent..;
+    setParent..;
+
+showWindow $window;
+}
+
+/////////////////////////////////
+global proc zbw_useCurrentReflect()
+{
+//if checkbox is changed . . . enable or disable frame
+int $new = (`checkBoxGrp -q -v1 zbw_useCurrentLayerReflectCB`);
+if (!$new) {
+	frameLayout -e -en 1 zbw_createNewReflectRLFrame;
+	}
+else {
+	frameLayout -e -en 0 zbw_createNewReflectRLFrame;
+	}
+}
+
+////////////////////////////////
+global proc zbw_updateReflectSourceRL()
+{
+//just grabs any text inputs and reruns the script to update the layers
+string $reflText = `textFieldGrp -q -tx zbw_reflectNewNameTFG`;
+zbw_renderLayerPassesUI($reflText);
+}
+
+///////////////////////////////////////
+global proc string zbw_returnShader(string $obj)
+{
+	//returns the shader for input of shape nodes. . . 
+	string $SG[] = `listConnections -type shadingEngine $obj`;
+	string $ShadGroup = $SG[0];
+	string $shader;
+	int $mayaShad = `connectionInfo -isDestination ($ShadGroup + ".surfaceShader")`;
+	int $MRShad = `connectionInfo -isDestination ($ShadGroup + ".miMaterialShader")`;
+	if ($mayaShad){
+		string $surfaceShader[] = `listConnections ($SG[0] + ".surfaceShader")`;
+		$shader = $surfaceShader[0];
+		}
+	if ($MRShad){
+		string $surfaceShader[] = `listConnections ($SG[0] + ".miMaterialShader")`;
+		$shader = $surfaceShader[0];	
+		}
+	//print ($shader + "\n");
+	return $shader;
+}
+
+//////////////////////////
+global proc zbw_reflOverride(string $shader, string $RL)
+{
+	editRenderLayerGlobals -crl $RL;
+	//isolate and rename the color channel
+	string $colorAttr;
+	string $ambAttr;
+	int $number;
+	if ((`objectType $shader`== "lambert") || (`objectType $shader`== "phong") || (`objectType $shader`== "blinn") || (`objectType $shader`== "anisotropic") || (`objectType $shader`== "phongE")|| (`objectType $shader` == "particleCloud")){
+		$colorAttr = ".color";
+		$ambAttr = ".ambientColor";
+		$number = 2;
+		}	
+	if (`objectType $shader`== "surfaceShader"){
+		$colorAttr = ".outColor";
+		$number = 1;
+		}
+	if ((`objectType $shader`== "mia_material_x")||(`objectType $shader`== "mia_material_x_passes") || (`objectType $shader`== "mia_material")||(`objectType $shader` == "dgs_material")){
+		$colorAttr = ".diffuse";
+		$number = 1;
+		}
+
+	string $color = ($shader + $colorAttr);
+	string $ambColor = ($shader + $ambAttr);
+
+	if (`connectionInfo -isDestination $color`){
+		editRenderLayerAdjustment $color;
+		string $file1 = `connectionInfo -sourceFromDestination $color`;
+		disconnectAttr ($file1) $color;
+		setAttr $color 0 0 0;
+		}
+	else{
+		editRenderLayerAdjustment $color;
+		setAttr $color 0 0 0;
+		}
+	if ($number==2){
+		if (`connectionInfo -isDestination $ambColor`)
+			{
+				editRenderLayerAdjustment $ambColor;
+				string $file2 = `connectionInfo -sourceFromDestination $ambColor`;
+				disconnectAttr ($file2) $ambColor;
+				setAttr $ambColor 0 0 0;
+			 }
+		else {
+			editRenderLayerAdjustment $ambColor;
+			setAttr $ambColor 0 0 0;
+			}
+		}
+	}
+
+///////////////////////////////////////
+global proc zbw_renderLayersRefl()
+{
+	int $new = `checkBoxGrp -q -v1 zbw_useCurrentLayerReflectCB`;
+	string $curRL;
+	if (!$new) {
+	//collect source render layer
+		string $sourceRL = `radioCollection -q -sl zbw_reflectSourceLayersRC`;
+		int $sourceRLCount = size($sourceRL);
+		$sourceRL = `startString $sourceRL ($sourceRLCount-2)`;
+	//grab objects from orig layer
+		renderLayerEditorSelectObjects RenderLayerTab $sourceRL;
+	//create new render layer
+		string $newRL = `textFieldGrp -q -tx zbw_reflectNewNameTFG`;
+		createRenderLayer -name $newRL -noRecurse `ls -selection`;
+		$curRL = $newRL;
+	//go to RL and select objects there
+		editRenderLayerGlobals -crl $curRL;
+		renderLayerEditorSelectObjects RenderLayerTab $curRL;
+		}
+	else {
+		$curRL = `editRenderLayerGlobals -q -currentRenderLayer`;
+		renderLayerEditorSelectObjects RenderLayerTab $curRL;
+		}
+	//get shapes in selection
+		string $obj[] = `ls -sl -shapes`;
+	//print $obj;
+		for ($me in $obj){
+			if ((`nodeType $me` == "mesh")||(`nodeType $me` == "subdiv") ||(`nodeType $me` == "nurbsSurface")){
+				string $shader = zbw_returnShader($me);
+				//print ($shader + "\n");
+				zbw_reflOverride($shader, $curRL);
+				}
+			}
+	}
+
+global proc zbw_reflectionPassMaker()
+{
+zbw_reflectionPassMakerUI("ReflectSpecRL");
+}
+
+
+
+
+
+
+
+
+
+
+

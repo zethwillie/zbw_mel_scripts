@@ -1,0 +1,152 @@
+/*
+zbw_attributes
+script by Zeth Willie (williework.blogspot.com, zeth@catbuks.com)
+
+select a number of objects and run script. You can hide/show and lock/unlock any of the standard transforms.
+The bottom section will change the color of the object from the "coloroverride" attribute. click on a color and it's done
+
+*/
+
+
+global proc zbw_attributes()
+{
+if (`window -exists zbw_attributesUI`)
+	{
+	deleteUI zbw_attributesUI;
+	windowPref -remove zbw_attributesUI;
+	}
+	string $win =  `window -s 1 -rtf 1 -tb 1 -widthHeight 400 500 -title "zbw_attributes" zbw_attributesUI`;
+		string $tabs = `tabLayout -scr 1`;
+			string $tab1 = `columnLayout`;
+
+				frameLayout -cll 1 -w 400 -label "Lock/Hide";
+					columnLayout ;
+					checkBoxGrp -ncb 4 -la4 "transl" "rot" "scale" "vis" zbw_StrChannelCBG;
+					radioButtonGrp -nrb 2 -labelArray2 "unlock" "lock" -sl 2 zbw_lockRBG;
+					radioButtonGrp -nrb 2 -labelArray2 "hide" "show" -sl 1 zbw_hideRBG;
+					button -label "Do it" -command zbw_attributesStripProc;
+					
+					setParent..;
+				setParent..;
+				frameLayout -cll 1-cl 0 -w 400 -label "Color";
+					rowColumnLayout -nc 4;
+						canvas -rgbValue 1 0 0 -width 50 -height 20 -pc  "zbw_controlColor (13)";
+						canvas -rgbValue 0 1 0 -width 50 -height 20 -pc  "zbw_controlColor (14)";
+						canvas -rgbValue 0 0 1 -width 50 -height 20 -pc  "zbw_controlColor (6)";
+						canvas -rgbValue 1 1 0 -width 50 -height 20 -pc  "zbw_controlColor (17)";
+
+						canvas -rgbValue 0.5 0.1 0.1 -width 50 -height 20 -pc  "zbw_controlColor (4)";												
+						canvas -rgbValue 0.15 0.35 0.1 -width 50 -height 20 -pc  "zbw_controlColor (7)";
+						canvas -rgbValue 0.1 0.3 0.7 -width 50 -height 20 -pc  "zbw_controlColor (15)";
+						canvas -rgbValue 0.95 0.8 0.5 -width 50 -height 20 -pc  "zbw_controlColor (24)";
+						
+						canvas -rgbValue 1 0.8 0.965 -width 50 -height 20 -pc  "zbw_controlColor (20)";
+					 	canvas -rgbValue 0.6 0.95 0.5 -width 50 -height 20 -pc  "zbw_controlColor (23)";
+						canvas -rgbValue 0.8 0.9 1 -width 50 -height 20 -pc  "zbw_controlColor (18)";
+					 	canvas -rgbValue 1 1 0.5 -width 50 -height 20 -pc  "zbw_controlColor (22)";
+
+						setParent..;
+				setParent..;
+			setParent..;
+	
+			string $tab2 = `columnLayout`;
+				frameLayout -cll 0 -w 400 -label "Add attributes";
+					columnLayout;
+					textFieldGrp -label "attr long name" zbw_addAttrTFG;
+					setParent..;
+				setParent..;
+			setParent..;	
+	
+	
+	tabLayout -edit 
+		-tabLabel $tab1 "Modify"
+		-tabLabel $tab2 "Add"
+		$tabs;
+	
+showWindow $win;	
+}
+
+proc int zbw_checkTransforms(string $toCheck[])
+{
+	//checks to make sure selected items are transform nodes
+	//string $toCheck[] = `ls -sl`;
+	int $canary = 1;
+	for ($a in $toCheck) {
+		if (!(`objectType -isType "transform" $a`)){
+			$canary = 0;
+			}
+		}
+	return $canary;	
+}
+
+global proc zbw_attributesStripProc()
+{
+	string $sel[]=`ls -sl`;
+	string $attr[];
+	string $t[] = {".tx", ".ty", ".tz"};
+	string $r[] = {".rx", ".ry",".rz"};
+	string $s[] = {".sx",".sy",".sz"};
+	string $v[] = {".v"};
+	int $trans = `checkBoxGrp -q -v1 zbw_StrChannelCBG`;
+	int $rot = `checkBoxGrp -q -v2 zbw_StrChannelCBG`;
+	int $scale = `checkBoxGrp -q -v3  zbw_StrChannelCBG`;
+	int $vis = `checkBoxGrp -q -v4 zbw_StrChannelCBG`;
+	int $lock = ((`radioButtonGrp -q -sl zbw_lockRBG`)-1);
+	int $hide = ((`radioButtonGrp -q -sl zbw_hideRBG`)-1);
+	if ($trans){
+		appendStringArray ($attr, $t, 3);
+	}
+		if ($rot){
+		appendStringArray ($attr, $r, 3);
+	}
+		if ($scale){
+		appendStringArray ($attr, $s, 3);
+	}
+		if ($vis){
+		appendStringArray ($attr, $v, 1);
+	}
+	int $check = zbw_checkTransforms($sel);
+	if ($check){
+		for ($a in $sel){
+			for ($b in $attr){
+				string $thisAttr = $a + $b;
+				setAttr $thisAttr -l $lock -k $hide;
+				}
+			}
+		}
+		
+	else {
+		error "must select only transforms";
+		}
+}
+
+proc int zbw_checkTransforms(string $toCheck[])
+{
+	//checks to make sure selected items are transform nodes
+	//string $toCheck[] = `ls -sl`;
+	int $canary = 1;
+	for ($a in $toCheck) {
+		if (!(`objectType -isType "transform" $a`)){
+			$canary = 0;
+			}
+		}
+	return $canary;	
+}
+
+global proc zbw_controlColor(int $color)
+{
+	string $sel[] = `ls -sl`;
+	int $sizeSel = size ($sel);
+	for ($i=0;$i<$sizeSel;++$i){
+		string $this = $sel[$i];
+		string $thisChild[]=`listRelatives -c $this`;
+		string $thisShape = $thisChild[0];
+		string $thisShapeOver = $thisShape + ".overrideEnabled";
+		string $thisShapeColor = $thisShape + ".overrideColor";
+	
+		setAttr $thisShapeOver 1;
+		setAttr $thisShapeColor $color;
+	}
+}
+
+zbw_attributes();

@@ -1,0 +1,79 @@
+global proc zbw_cameraHelper(){
+if (`window -exists zbw_cameraHelperUI`)
+	{
+	deleteUI zbw_cameraHelperUI;
+	windowPref -remove zbw_cameraHelperUI;
+	}
+	string $win =  `window -s 1 -rtf 1 -tb 1 -widthHeight 400 200 -title "cameraHelper" zbw_cameraHelperUI`;
+				columnLayout;
+					columnLayout -w 400;
+					text "Select the camera(s) you want to use for locator placement";
+					text "Enter the distance in front of the camera you want the locator to be placed";
+					floatFieldGrp -l "distanceFromCam" -v1 100 zbw_distanceFF;
+					button -label "create Locator!" -command "zbw_cameraLocPlace";
+					text "_____________________________________________";
+					text "Now select the locator you want to snap to, then the object/group to snap";
+					text "This wont' ORIENT or ROTATE the snapped object";
+					button-label "snap to Locator" -command "zbw_snapToLoc";
+					
+					setParent..;
+				setParent..;	
+	
+showWindow $win;
+
+}
+
+global proc zbw_cameraLocPlace(){
+string $sel[]= `ls -sl`;
+
+for ($cam in $sel){
+	string $camName = $cam;
+	string $locName = $cam + "_LOC";
+	string $camShape = $cam + "Shape";
+	if (`objectType $camShape`=="camera"){
+		if (!(`objectExists $locName`)){
+			//create locator (name based on text field)
+			spaceLocator -n $locName -p 0 0 0;
+			//move locator to camera, orient
+			pointConstraint-n "tempLocPC" $camName $locName;
+			orientConstraint-n "tempLocOC" $camName $locName;
+			delete tempLocPC tempLocOC;
+			//move locator to distance from camera (based on float field) in world space
+			float $distance = `floatFieldGrp -q -v1 zbw_distanceFF`;
+			move -r -os 0 0 (-1 * $distance) $locName;
+			}
+		else {
+			warning ("there already is a locator for " + $cam);	
+			}	
+		}
+	else {
+		warning ($cam + " is not a camera. Skipping");	
+		}	
+	}
+}
+
+global proc zbw_snapToLoc(){
+string $sel[] = `ls -sl`;
+int $sizeSel  = size ($sel);
+if ($sizeSel==2){
+	//check that 0 is the locator
+	string $loc = $sel[0];
+	string $char = $sel[1];
+	string $locShape = $loc + "Shape";
+	if (`objectType $locShape`=="locator"){
+		pointConstraint -n "tempCharPC" $loc $char;
+		delete tempCharPC;
+		}
+	else{
+		warning "first object selected isn't a locator";		
+		}
+	}	
+else {
+	warning "You need two objects selected. First select the locator, then select the character group";	
+}
+	
+	
+	
+}
+
+zbw_cameraHelper;

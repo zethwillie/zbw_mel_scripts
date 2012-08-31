@@ -1,0 +1,52 @@
+/*
+zbw_randomSelection
+script by Zeth Willie (williework.blogspot.com, zeth@catbuks.com)
+
+select a group of objects and run the script. Will remove a certain percentage of those selected files from the selection. 
+So if you select 1000 objects and run the script with a value of 25%, you should then have a random assortment of about 750 of the original object still selected..
+This runs on each item individually, so the actual numbers will be close but not exact (ex. in the above example, each object has a 25% chance of 
+being deselected, with no bearing on the next object)
+
+
+*/
+
+global proc zbw_randomSelection()
+{
+if (`window -exists zbw_randSelUI`){
+	deleteUI zbw_randSelUI;
+	windowPref -remove zbw_randSelUI;	
+	}
+	
+string $RSwindow = `window -title "zbw_randomSelection" zbw_randSelUI`;
+	columnLayout;
+		frameLayout -w 400 -label  "Random Selection";
+			columnLayout;
+				text "Percentage of the selection to remove:";
+				intFieldGrp -label "Remove"  -extraLabel "%"  removeIFG;
+				text "";
+				button -label "deselect random" -command zbw_randSel;
+				setParent;
+			setParent;
+		setParent;
+		
+showWindow $RSwindow;			
+}
+
+global proc zbw_randSel()
+{
+string $sel[] = `ls -sl`;
+int $sizeSel = size ($sel);
+int $thisTest[] = `intFieldGrp -q -v removeIFG`;
+for ($a=0;$a<$sizeSel;$a++) {
+	float $float =  `rand 0 101`;
+	int $int = int ($float);
+	if ($thisTest[0]>$int) {
+		select -tgl $sel[$a];	
+		}
+	
+	}
+	
+	
+}
+
+zbw_randomSelection;

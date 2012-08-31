@@ -1,0 +1,202 @@
+/*
+zbw_playblast
+script by Zeth Willie (williework.blogspot.com, zeth@catbuks.com)
+
+Just some options in a convenient form to speed up the playblasting process
+
+*/
+
+
+global proc zbw_playblast()
+{
+if (`window -exists zbw_playblastUI`)
+	{
+	deleteUI zbw_playblastUI;
+	windowPref -remove zbw_playblastUI;		
+	}
+					float $minPlay = `playbackOptions -q -minTime`;
+					float $maxPlay = `playbackOptions -q -maxTime`;
+					string $name = `file -q -sceneName -shortName`;
+					string $nameBuff[];
+					select defaultRenderGlobals;
+					int $width =  `getAttr "defaultResolution.width"`;
+					int $height = `getAttr "defaultResolution.height"`;
+					tokenize $name "." $nameBuff;
+					string $thisFile = $nameBuff[0];
+					select -cl;
+string $window =`window -mnb 1 -mxb 0 -tlb 1 -rtf 1 -title "zbw_playblast" zbw_playblastUI`;
+	columnLayout;
+
+			frameLayout -width 380 -mh 5 -label "Geometry-Curve Display Options";
+				rowColumnLayout -numberOfRows 1;				
+					text "PanelDisplay";
+					button -label "justGEO" -command "zbw_displayPanel(1)";
+					button -label "GEO_Curves" -command "zbw_displayPanel(2)";
+					button -label "all" -command "zbw_displayPanel(3)";
+					setParent ..;
+				setParent ..;
+			setParent ..;
+
+			frameLayout -width 380 -mh 5 -label "Gate-Overscan-Color Options";
+				rowColumnLayout -numberOfRows 1;			
+					button -label "OverScan toggle" -command "zbw_toggleOverscan";
+					button -label "Gate toggle" -command "zbw_resGate";
+					setParent..;
+				setParent..;
+				rowLayout -nc 4;
+					canvas -rgbValue 0.6 0.6 0.6 -width 50 -height 20  -pc "zbw_background(0.6,0.6,0.6)";
+					canvas -rgbValue 0 0 0 -width 50 -height 20  -pc "zbw_background(0,0,0)";
+					canvas -rgbValue 1 1 1 -width 50 -height 20  -pc "zbw_background(1,1,1)";			
+					canvas -rgbValue 0 1 0 -width 50 -height 20  -pc "zbw_background(0,1,0)";
+					setParent ..;
+				setParent ..;
+			setParent ..;
+			frameLayout -width 380 -collapsable true -cl 1 -label "Playblast Time Range";
+				rowColumnLayout -numberOfRows 1;
+					text "minRange";
+					floatField -v $minPlay MinPlay;
+					text "maxRange";
+					floatField -v $maxPlay MaxPlay;
+					button -label "Get Slider Range" -command "zbw_getRange";
+					setParent ..;
+				setParent ..;
+			setParent ..;
+				
+			frameLayout -width 380 -collapsable true -cl 1 -label "Playblast Size Options";
+				rowColumnLayout -numberOfRows 1;
+					text "percent";
+					intField -v 100 PBPercent;
+					text "size";
+					intField -v $width PBwidth;
+					intField -v $height PBheight;
+					setParent ..;
+				setParent ..;
+			frameLayout -width 380 -collapsable true -cl 1 -label "Playblast Ornament Options";
+				rowColumnLayout -numberOfRows 1;
+					checkBox -v 0 -label "viewOrnaments" ViewOrn;
+					checkBox -v 1 -label "forceOverwrite" Force;	
+					setParent ..;
+				setParent ..;
+			setParent ..;
+			frameLayout -width 380 -label "Naming Options";
+				rowColumnLayout -numberOfRows 2;
+					textFieldGrp -cal 1 left -w 380 -label "PlayBlastName:" -tx $thisFile PBTxtName;
+					button -label "RefreshSceneName" -command "zbw_getSceneName";
+					setParent ..;
+				setParent ..;
+			setParent ..;
+			frameLayout -width 380 -label "Playblast";	
+				button -label "PLAYBLAST" -command "zbw_getPBInfo";
+
+showWindow $window;
+
+}
+
+global proc zbw_getPBInfo()
+{
+	float $min = `floatField -q -v MinPlay`;
+	float $max = `floatField -q -v MaxPlay`;
+	string $PBFileName = `textFieldGrp -q -tx PBTxtName`;
+	int $percent = `intField -q -v PBPercent`;
+	int $viewOrn = `checkBox -q -v ViewOrn`;
+	int $force = `checkBox -q -v Force`;
+	string $overwriteState = "";
+	if ($force == 1) {
+		$overwriteState = "-fo";
+		}
+	int $wide = `intField -q -v PBwidth`;
+	int $high = `intField -q -v PBheight`;
+	playblast -fmt "movie" -st $min -et $max -p $percent -w $wide -h $high $overwriteState -orn $viewOrn -f $PBFileName;
+}
+
+global proc zbw_background(float $r, float $g, float $b)
+{
+displayRGBColor "background" $r $g $b;	
+}
+
+global proc zbw_toggleOverscan()
+{ 
+string $panel = `getPanel -wf`;
+string $camera = `modelPanel -q -camera $panel`; 
+select $camera;
+string $camOver = ($camera + ".overscan");
+float $state = `getAttr $camOver`;
+if ($state != 1) {
+	setAttr $camOver 1;
+	}
+ else {
+	setAttr $camOver 1.3;
+	} 
+}
+
+global proc zbw_resGate()
+{
+string $panel = `getPanel -wf`;
+string $camera = `modelPanel -q -camera $panel`; 
+select $camera;
+
+string $resolution = $camera + ".displayResolution";
+string $action = $camera + ".displaySafeAction";
+string $title = $camera + ".displaySafeTitle";
+
+if (`getAttr $title`){
+	camera -e -displayFilmGate off -displayResolution off -displaySafeAction off -displaySafeTitle off $camera;
+	}
+
+else if (`getAttr $action`) {
+	camera -e -displayFilmGate off -displayResolution on -displaySafeAction on -displaySafeTitle on $camera;
+	}
+else	{
+	camera -e -displayFilmGate off -displayResolution on -displaySafeAction on -displaySafeTitle off $camera;
+	}
+}
+
+global proc zbw_getSceneName()
+{
+string $thisNameBuff[];
+string $thisFileName = `file -q -sceneName -shortName`;
+tokenize $thisFileName "." $thisNameBuff;
+string $thisFile = $thisNameBuff[0];
+textFieldGrp -e -tx $thisFile PBTxtName;
+}
+
+global proc zbw_displayPanel(int $value)
+{
+string $thisPanel = `getPanel -wf`;
+switch ($value){
+	case 1:
+		//turn off all but GEO
+		modelEditor -e -allObjects 0 $thisPanel;
+		modelEditor -e -polymeshes 1 $thisPanel;
+		modelEditor -e -nurbsSurfaces 1 $thisPanel;
+		modelEditor -e -grid 0 $thisPanel;
+		break;
+	case 2:
+		//turn off all but GEO & curves
+		modelEditor -e -allObjects 0 $thisPanel;
+		modelEditor -e -polymeshes 1 $thisPanel;
+		modelEditor -e -nurbsSurfaces 1 $thisPanel;
+		modelEditor -e -grid 0 $thisPanel;
+		modelEditor -e -nurbsCurves 1 $thisPanel;
+		break;
+	default:
+		//turn on all
+		modelEditor -e -allObjects 1 $thisPanel;
+		break;
+	}
+}
+
+global proc zbw_getRange()
+	{
+	float $curMin = `playbackOptions -q -minTime`;
+	float $curMax = `playbackOptions -q -maxTime`;
+	floatField -e -v $curMin MinPlay;
+	floatField -e -v $curMax MaxPlay;
+	}
+
+zbw_playblast;
+
+
+
+
+

@@ -1,0 +1,59 @@
+/*
+zbw_shaderBasic
+script by Zeth Willie (williework.blogspot.com, zeth@catbuks.com)
+
+create a basic default bunch of shaders for generic render setup
+shaders created: 
+Surface Shaders:
+	white_SS
+	black_SS
+	idMatte_red_SS
+	idMatte_green_SS
+	idMatte_blue_SS
+Lamberts:
+	blackHole
+
+*/
+global proc zbw_shaderBasic()
+{
+	//create 5 surface shaders - white, black, red, green, blue
+	if ((`objExists white_SS`) != 1){
+		
+		if ((`objExists whiteSG`) !=1){
+			
+			string $color[] = {"white", "black", "idMatte_red", "idMatte_green", "idMatte_blue"};
+			int $sizeColor = size($color);
+			
+			for ($a=0; $a<$sizeColor;$a++){
+				string $name = ($color[$a] + "_SS");
+				string $SG = ($color[$a] + "SG");
+				shadingNode -asShader surfaceShader -n $name;
+				sets -renderable true -noSurfaceShader true -empty -name $SG;
+				connectAttr -f ($name + ".outColor") ($SG + ".surfaceShader");
+				}
+				
+			setAttr "white_SS.outColor" -type double3 1 1 1 ;	
+			setAttr "black_SS.outColor" -type double3 0 0 0 ;
+			setAttr "idMatte_red_SS.outColor" -type double3 1 0 0 ;	
+			setAttr "idMatte_green_SS.outColor" -type double3 0 1 0 ;	
+			setAttr "idMatte_blue_SS.outColor" -type double3 0 0 1 ;
+				
+			//create a lambert and change the opacity thing to "black hole"
+			string $BH = "blackHole";
+			string $BHSG = "blackHoleSG";
+			shadingNode -asShader lambert -n $BH;
+			sets -renderable true -noSurfaceShader true -empty -name $BHSG;
+			connectAttr -f ($BH +".outColor") ($BHSG + ".surfaceShader");
+			setAttr ($BH+".matteOpacityMode") 0;
+			}
+		else {
+			error "check that these shaders and SG's don't already exist ";	
+		}
+	}
+	else {
+		error "check that these shaders and SG's don't already exist ";		
+	}
+}
+
+
+zbw_shaderBasic();

@@ -1,0 +1,216 @@
+global proc zbw_vrayGamma()
+
+{
+/////////////////////
+//vray gamma insert (defaults to 2.2)
+//select vray materials you want to use. This will look for connections
+//to the diffuse color, reflectionColor and reflectionGlossiness attrs of
+//the material and change turn on those gammas and make them 2.2
+/////////////////////
+
+//grab every texture in the scene? grab inputs from selected shader - color, spec attr, etc. 
+//add extra attr and 
+
+string $sel[] = `ls -sl`;
+
+for ($shader in $sel){
+	string $color = $shader + ".diffuseColor";
+	string $reflect = $shader + ".reflectionColor";
+	string $gloss = $shader + ".reflectionGlossiness";
+	string $diffuseTex = $shader + ".diffuseTex";
+	string $reflection = $shader + ".reflection";
+	string $col = $shader + ".color";
+	string $overall = $shader + ".overallTex";
+	string $sub = $shader + ".subsurfaceColor";
+	string $overColor = $shader + ".overallColor";
+	string $scatter = $shader + ".scatterColor";
+	
+	 //check to see what attrs are present, check if it's a layered shader
+	string $type = `objectType $shader`;
+	if ($type != "VRayBlendMtl"){ 
+		//search for connection to diffuseColor	
+		if (`attributeExists "diffuseColor" $shader`){
+			string $imageC = `connectionInfo -sourceFromDestination $color`;
+			if ($imageC != ""){
+				//dummy check to see if attrs already exist
+				int $dcColorEn = `attributeExists vrayFileGammaEnable $imageC`;
+				int $dcColorVal = `attributeExists vrayFileGammaValue $imageC`;
+				if ((!$dcColorEn) && (!$dcColorVal)){
+					//enable gamma correct attrs in color image
+					vrayAddAttr $imageC vrayFileGammaEnable;
+					vrayAddAttr $imageC vrayFileGammaValue;	
+					}
+				else {
+					warning ($imageC + " already has the required attrs. Skipping");
+					}
+				}
+			}
+		
+		//search for connection to reflectionColor
+		if (`attributeExists "reflectionColor" $shader`){
+			string $imageRC = `connectionInfo -sourceFromDestination $reflect`;
+			if ($imageRC != ""){
+				//dummy check to see if attrs already exist
+				int $dcReflEn = `attributeExists vrayFileGammaEnable $imageRC`;
+				int $dcReflVal = `attributeExists vrayFileGammaValue $imageRC`;
+				if ((!$dcReflEn) && (!$dcReflVal)){
+					//enable gamma correct attrs in color image
+					vrayAddAttr $imageRC vrayFileGammaEnable;
+					vrayAddAttr $imageRC vrayFileGammaValue;	
+					}
+				else {
+					warning ($imageRC + " already has the required attrs. Skipping");
+					}
+				}
+			}	
+		if (`attributeExists "reflectionGlossiness" $shader`){			
+		//search for connection to reflectionGlossiness
+		string $imageRG = `connectionInfo -sourceFromDestination $gloss`;
+		if ($imageRG != ""){
+			//dummy check to see if attrs already exist
+			int $dcGlossEn = `attributeExists vrayFileGammaEnable $imageRG`;
+			int $dcGlossVal = `attributeExists vrayFileGammaValue $imageRG`;	
+			if ((!$dcGlossEn) && (!$dcGlossVal)){
+				//enable gamma correct attrs in color image
+				vrayAddAttr $imageRG vrayFileGammaEnable;
+				vrayAddAttr $imageRG vrayFileGammaValue;
+				}
+			else {
+				warning ($imageRG + " already has the required attrs. Skipping");
+				}	
+			}
+		}
+		
+		if (`attributeExists "diffuseTex" $shader`){			
+		//search for connection to diffuseTex
+		string $imageDT = `connectionInfo -sourceFromDestination $diffuseTex`;
+		if ($imageDT != ""){
+			//dummy check to see if attrs already exist
+			int $dcDTEn = `attributeExists vrayFileGammaEnable $imageDT`;
+			int $dcDTVal = `attributeExists vrayFileGammaValue $imageDT`;	
+			if ((!$dcDTEn) && (!$dcDTVal)){
+				//enable gamma correct attrs in color image
+				vrayAddAttr $imageDT vrayFileGammaEnable;
+				vrayAddAttr $imageDT vrayFileGammaValue;
+				}
+			else {
+				warning ($imageDT + " already has the required attrs. Skipping");
+				}	
+			}
+		}
+		
+		if (`attributeExists "reflection" $shader`){			
+		//search for connection to reflection
+		string $imageR = `connectionInfo -sourceFromDestination $reflection`;
+		if ($imageR != ""){
+			//dummy check to see if attrs already exist
+			int $dcRefEn = `attributeExists vrayFileGammaEnable $imageR`;
+			int $dcRefVal = `attributeExists vrayFileGammaValue $imageR`;	
+			if ((!$dcRefEn) && (!$dcRefVal)){
+				//enable gamma correct attrs in color image
+				vrayAddAttr $imageR vrayFileGammaEnable;
+				vrayAddAttr $imageR vrayFileGammaValue;
+				}
+			else {
+				warning ($imageR + " already has the required attrs. Skipping");
+				}	
+			}
+		}		
+	
+		if (`attributeExists "color" $shader`){			
+		//search for connection to color
+		string $imageCol = `connectionInfo -sourceFromDestination $col`;
+		if ($imageCol != ""){
+			//dummy check to see if attrs already exist
+			int $dcColEn = `attributeExists vrayFileGammaEnable $imageCol`;
+			int $dcColVal = `attributeExists vrayFileGammaValue $imageCol`;	
+			if ((!$dcColEn) && (!$dcColVal)){
+				//enable gamma correct attrs in color image
+				vrayAddAttr $imageCol vrayFileGammaEnable;
+				vrayAddAttr $imageCol vrayFileGammaValue;
+				}
+			else {
+				warning ($imageCol + " already has the required attrs. Skipping");
+				}	
+			}
+		}	
+
+		if (`attributeExists "overallTex" $shader`){			
+		//search for connection to reflectionGlossiness
+		string $imageO = `connectionInfo -sourceFromDestination $overall`;
+		if ($imageO != ""){
+			//dummy check to see if attrs already exist
+			int $dcOEn = `attributeExists vrayFileGammaEnable $imageO`;
+			int $dcOVal = `attributeExists vrayFileGammaValue $imageO`;	
+			if ((!$dcOEn) && (!$dcOVal)){
+				//enable gamma correct attrs in color image
+				vrayAddAttr $imageO vrayFileGammaEnable;
+				vrayAddAttr $imageO vrayFileGammaValue;
+				}
+			else {
+				warning ($imageO + " already has the required attrs. Skipping");
+				}	
+			}
+		}
+
+		if (`attributeExists "subsurfaceColor" $shader`){			
+		//search for connection to subsurface
+		string $imageSub = `connectionInfo -sourceFromDestination $sub`;
+		if ($imageSub != ""){
+			//dummy check to see if attrs already exist
+			int $dcSubEn = `attributeExists vrayFileGammaEnable $imageSub`;
+			int $dcSubVal = `attributeExists vrayFileGammaValue $imageSub`;	
+			if ((!$dcSubEn) && (!$dcSubVal)){
+				//enable gamma correct attrs in color image
+				vrayAddAttr $imageSub vrayFileGammaEnable;
+				vrayAddAttr $imageSub vrayFileGammaValue;
+				}
+			else {
+				warning ($imageSub + " already has the required attrs. Skipping");
+				}	
+			}
+		}	
+	
+		if (`attributeExists "scatterColor" $shader`){			
+		//search for connection to scatter
+		string $imageScat = `connectionInfo -sourceFromDestination $scatter`;
+		if ($imageScat != ""){
+			//dummy check to see if attrs already exist
+			int $dcScatEn = `attributeExists vrayFileGammaEnable $imageScat`;
+			int $dcScatVal = `attributeExists vrayFileGammaValue $imageScat`;	
+			if ((!$dcScatEn) && (!$dcScatVal)){
+				//enable gamma correct attrs in color image
+				vrayAddAttr $imageScat vrayFileGammaEnable;
+				vrayAddAttr $imageScat vrayFileGammaValue;
+				}
+			else {
+				warning ($imageScat + " already has the required attrs. Skipping");
+				}	
+			}
+		}
+
+		if (`attributeExists "overallColor" $shader`){			
+		//search for connection to overallColor
+		string $imageOC = `connectionInfo -sourceFromDestination $overColor`;
+		if ($imageOC != ""){
+			//dummy check to see if attrs already exist
+			int $dcOCEn = `attributeExists vrayFileGammaEnable $imageOC`;
+			int $dcOCVal = `attributeExists vrayFileGammaValue $imageOC`;	
+			if ((!$dcOCEn) && (!$dcOCVal)){
+				//enable gamma correct attrs in color image
+				vrayAddAttr $imageOC vrayFileGammaEnable;
+				vrayAddAttr $imageOC vrayFileGammaValue;
+				}
+			else {
+				warning ($imageOC + " already has the required attrs. Skipping");
+				}	
+			}
+		}
+
+		}
+	
+	}
+	
+}
+
+zbw_vrayGamma;

@@ -1,0 +1,628 @@
+/*
+proc to use: zbw_renderPasses
+
+*****NOTE:
+This script requires the "simplePasses" shader, which can be downloaded here: http://www.mymentalray.com/index.php?option=com_shaders&Itemid=108&Action=DisplayDetail&ObjectId=82
+One could easily switch this to another shader buffer, you'd just have to change the connections in the code below
+
+HOW IT WORKS:
+Setup Tab:
+Will create check boxes for  all the mia-x shaders in the scene. Select which ones you want to create passes for.
+Then select which passes you want to create.(if you don't want to do any mia_x shaders, just use the second tab to create FB/Outpasses and connect shaders manually)
+Select your render camera from the list
+Select the file format and depth and click button. The script will create "simplepasses" shaders for each mia_x and connect the correct outputs
+It will then create  and connect the appropriate userFrameBuffers and camera output passes
+The exr check combine box basically overrides the file name that is automatically put in and 
+	names all the passes the same name so they arrive in one exr file as layers (supposedly, on my mac I have some issues with this)
+
+AddShaders Tab:
+click update list to see the frame buffers and output passes. - use this to help with managing slots in simple passes
+This area allow you add new FB and output passes WITHOUT CONNECTIONS TO ANY SIMPLE PASS SHADERS (OR ANY OTHER SHADERS)
+Use these to add stuff like uv, point shaders, etc, just create a new slot in all simple pass materials and connect to that
+the short name is the name of the FB, the OP, and the postfix of the image itself
+
+RenderLayersTab:
+Manage which passes are renderable within each render layer
+choose renderlayer (this will update selected render layers)
+Then choose "renderable" on/of for each pass, it will set that value as an override
+
+*/
+
+global proc zbw_renderPasses()
+
+{
+	
+//create a UI interface for setting up mia_x render passes
+	if (`window -exists zbw_renderPassesUI`)
+	{
+		deleteUI zbw_renderPassesUI;
+		windowPref -remove zbw_renderPassesUI;		
+	}
+
+string $window = `window -s 1 -tb 1 -rtf 1 -widthHeight 200 400 -title "zbw_renderPasses" zbw_renderPassesUI`;
+	string $tabs = `tabLayout -scr 1`;
+	string $tab1 = `columnLayout`;
+	columnLayout;
+		frameLayout -w 400 -label "Select MIA_X Shaders to Create Pass Shaders for";
+			rowColumnLayout -nc 3;
+			string $mia[] = `ls -type "mia_material_x"`;
+			int $sizeMia = size($mia);
+			for ($b=0;$b<$sizeMia;$b++){
+			checkBox -label ($mia[$b]) ("zbw_pass"+$mia[$b]+"CB");		
+			}
+			setParent..;
+		setParent..;
+	setParent..;	
+	columnLayout;
+		frameLayout -w 400 -label "Select Passes and Outputs";
+			columnLayout;
+			checkBox -ed 0 -v 1 -label "result" zbw_passResultCB;
+			checkBoxGrp -ncb 3 -va3 0 1 1 -la3 "diffuse_result" "diffuse_raw" "diffuse_level" zbw_passDiffCBG;
+			checkBoxGrp -ncb 3 -va3 1 0 0 -la3 "spec_result" "spec_raw" "spec_level" zbw_passSpecCBG;
+			checkBoxGrp -ncb 3 -va3 1 0 0 -la3 "refl_result" "refl_raw" "refl_level" zbw_passReflCBG;
+			checkBoxGrp -ncb 3 -va3 0 0 0 -la3 "refr_result" "refr_raw" "refr_level" zbw_passRefrCBG;
+			checkBoxGrp -ncb 3 -va3 0 0 0 -la3 "tran_result" "tran_raw" "tran_level" zbw_passTranCBG;	
+			checkBoxGrp -ncb 3 -va3 0 0 1 -la3 "indir_result" "indir_raw" "indir_postAO" zbw_passIndirCBG;
+			checkBoxGrp -ncb 3 -va3 0 0 0 -la3 "opac_result" "opac_raw" "opacity" zbw_passOpacCBG;
+			checkBoxGrp -ncb 2 -va2 0 0 -la2 "ao_raw" "add_result" zbw_passAOCBG;
+			setParent..;
+		setParent..;
+		frameLayout -w 400 -label "Select Render Camera";	
+			columnLayout;
+			radioCollection zbw_passCamRC;
+			string $cams[] = `ls -type "camera"`;
+			int $sizeCams = size($cams);
+			for ($a=0;$a<$sizeCams;$a++){
+			radioButton -label ($cams[$a]) ($cams[$a]+"RB");
+			}
+			radioButton -edit -sl ($cams[0] + "RB");
+			setParent..;
+		setParent..;
+		frameLayout -w 400 -label "Select Pass File Output Format";
+			columnLayout;
+			radioButtonGrp -nrb 3 -sl 2 -la3 "iff" "tiff" "exr" zbw_passFormatRBG;
+			checkBox -label "for exr- combine files?" zbw_passExrCB;
+			textFieldGrp -label "exr pass name" zbw_passExrnameTFG;
+			setParent..;
+		setParent..;
+		frameLayout -w 400 -label "Select Default Bit Depth";
+			columnLayout;
+			radioButtonGrp -nrb 3 -sl 3 -la3 "8" "16" "32" zbw_passDepthRBG;
+			setParent..;
+		setParent..;
+		frameLayout -w 400 -label "Select Default Channels";
+			columnLayout;
+			radioButtonGrp -nrb 2 -sl 2 -la2 "RGB" "RGBA" zbw_passChannelRBG;
+			setParent..;
+		setParent..;
+		frameLayout -w 400 -label "Other Options";
+			columnLayout;
+			checkBox -v 1 -label "Turn Off Glow (RenderGlobals)" zbw_passGlowCB;
+			setParent..;
+		setParent..;
+		frameLayout -w 400 -label "Finish Up";
+			columnLayout;
+			button -label "Set Up Passes!" -command zbw_renderPasses_Do;
+			setParent..;
+		setParent..;
+	setParent..;
+setParent..;	
+	string $tab2 = `columnLayout`;
+		frameLayout -w 400 -label "Add Passes";
+			columnLayout;
+			text "Existing slot/FB/OutputPass";
+			textScrollList -w 400 -h 100 zbw_passFBTSL;
+			zbw_passUpdatePass;
+			button -w 300 -label "UPDATE FB/OUTPASS LIST!" -command zbw_passUpdatePass;
+			setParent..;
+		setParent..;
+		frameLayout -w 400 -label "Type short name for Postfix of new pass";
+			columnLayout;
+			textFieldGrp -cal 1 left -label "short name" zbw_passNewPassTFG;
+			setParent..;
+		setParent..;
+		frameLayout -w 400 -label "Pick cam for output pass";
+			columnLayout;
+			//pick cam
+			radioCollection zbw_passNewCamRC;
+			string $cams[] = `ls -type "camera"`;
+			int $sizeCams = size($cams);
+			for ($a=0;$a<$sizeCams;$a++){
+				radioButton -label ($cams[$a]) ($cams[$a]+"RB");
+				}
+			setParent..;
+		setParent..;
+		frameLayout -w 400 -label "select bit depth and channels for new passes";
+			columnLayout;
+			//pick bit depth
+			radioButtonGrp -cal 1 left -nrb 3 -sl 3 -la3 "8" "16" "32" zbw_passNewDepthRBG;
+			//pick Channels
+			radioButtonGrp -cal 1 left -nrb 2 -sl 2 -la2 "RGB" "RGBA" zbw_passNewChannelRBG;
+			setParent..;
+		setParent..;
+		frameLayout -w 400 -label "Choose format options";
+			columnLayout;
+			//pick file format
+			radioButtonGrp -nrb 3 -sl 2 -la3 "iff" "tiff" "exr" zbw_passNewFormatRBG;
+			//checkBox -label "for exr- combine files?" zbw_passNewExrCB;
+			//textFieldGrp -label "pass name" zbw_passNewExrnameTFG;
+			setParent..;
+		setParent..;
+		frameLayout -w 400 -label "Add new pass";
+			columnLayout;
+			button -label "add pass (FB + OP)" -command zbw_passAddNew;
+			setParent..;
+		setParent..;
+	setParent..;
+setParent..;
+	string $tab3 = `columnLayout`;
+		frameLayout -w 400 -label "Select Render Layer from list";
+			columnLayout;
+			radioCollection zbw_passLayersRC;
+			string $rls[] = `ls -type "renderLayer"`;
+			int $sizeRls = size ($rls);
+			for ($z=0;$z<$sizeRls;$z++){
+				radioButton -cc zbw_passCheckOP -label ($rls[$z]) ($rls[$z] + "RB");
+				}
+			button -label "update render Layer List" zbw_passUpdateRP;
+			setParent..;
+		setParent..;
+		frameLayout -w 400 -label "Renderable Passes";	
+			columnLayout;
+			string $OP[] = `ls -type "mentalrayOutputPass"`;
+			int $sizeOP = size($OP);
+			for ($y=0;$y<$sizeOP; $y++){
+				//CHECK THESE VALUES PER RENDER LAYER, Will this happen automatically
+				int $opOn = `getAttr ($OP[$y]+".renderable")`;
+				checkBox -label ($OP[$y]) -v $opOn ($OP[$y] + "CB");
+				}
+			button -label "make changes to render layer passes" -command zbw_passOPRender;
+			setParent..;
+		setParent..;
+	setParent..;	
+tabLayout -edit
+	-tabLabel $tab1 "Setup"
+	-tabLabel $tab2 "Pass Control"
+	-tabLabel $tab3 "RenderLayers"
+	$tabs;
+showWindow $window;
+}
+
+global proc zbw_renderPasses_Do()
+{
+///////////////grab the camera from the checklist
+	string $camRC = `radioCollection -q -sl zbw_passCamRC` ;
+	//pull off the "RB" to get the cam shape
+	int $sizeCamRC = (size ($camRC)-2);
+	string $renderCam= startString ($camRC, $sizeCamRC);
+//////////////////Get list of shaders	
+	string $miaShads[] = `ls -type "mia_material_x"`;
+	string $mia[];
+	for ($me in $miaShads){
+		//populate a list of the shaders we'll do, so adding the simpleShads doesn't mess up the number?
+		if (`checkBox -q -v ("zbw_pass" + $me + "CB")`){
+			$mia[`size $mia`] = $me;
+			}
+		}
+		
+	/*//some kind of check to match the shaders that are in script window to what exists now
+	for ($b=0;$b<$sizeMia;$b++){
+		int $checkMIA = `checkBox -q -exists ("zbw_pass"+$mia[$b]+"CB")`;
+		//figure out a better way to count these
+		if ($checkMIA==0){
+			error "Rerun the script. You've added a material";	
+		}*/
+///////////////////Read the checkboxes and create the req number names, populate the list of attr to link also
+	string $passes[];
+	string $passesS[];
+	//simultaneously do shortLis of pass names for output			
+	if (`checkBox -q -v zbw_passResultCB`){
+		$passes[`size $passes`] = "result";
+		$passesS[`size $passesS`]="result";
+		}
+	if (`checkBoxGrp -q -v1 zbw_passDiffCBG`){
+		$passes[`size $passes`] = "diffuse_result";
+		$passesS[`size $passesS`]="diff";
+		}
+	if (`checkBoxGrp -q -v2 zbw_passDiffCBG`){
+		$passes[`size $passes`] = "diffuse_raw";
+		$passesS[`size $passesS`]="diffR";
+		}
+	if (`checkBoxGrp -q -v3 zbw_passDiffCBG`){
+		$passes[`size $passes`] = "diffuse_level";
+		$passesS[`size $passesS`]="diffL";
+		}
+	if (`checkBoxGrp -q -v1 zbw_passSpecCBG`){
+		$passes[`size $passes`] = "spec_result";
+		$passesS[`size $passesS`]="spec";
+		}
+	if (`checkBoxGrp -q -v2 zbw_passSpecCBG`){
+		$passes[`size $passes`] = "spec_raw";
+		$passesS[`size $passesS`]="specR";
+		}
+	if (`checkBoxGrp -q -v3 zbw_passSpecCBG`){
+		$passes[`size $passes`] = "spec_level";
+		$passesS[`size $passesS`]="specL";
+		}
+	if (`checkBoxGrp -q -v1 zbw_passReflCBG`){
+		$passes[`size $passes`] = "refl_result";
+		$passesS[`size $passesS`]="refl";
+		}
+	if (`checkBoxGrp -q -v2 zbw_passReflCBG`){
+		$passes[`size $passes`] = "refl_raw";
+		$passesS[`size $passesS`]="reflR";
+		}
+	if (`checkBoxGrp -q -v3 zbw_passReflCBG`){
+		$passes[`size $passes`] = "refl_level";
+		$passesS[`size $passesS`]="reflL";
+		}
+	if (`checkBoxGrp -q -v1 zbw_passRefrCBG`){
+		$passes[`size $passes`] = "refr_result";
+		$passesS[`size $passesS`]="refr";
+		}
+	if (`checkBoxGrp -q -v2 zbw_passRefrCBG`){
+		$passes[`size $passes`] = "refr_raw";
+		$passesS[`size $passesS`]="refrR";
+		}
+	if (`checkBoxGrp -q -v3 zbw_passRefrCBG`){
+		$passes[`size $passes`] = "refr_level";
+		$passesS[`size $passesS`]="refrL";
+		}
+	if (`checkBoxGrp -q -v1 zbw_passTranCBG`){
+		$passes[`size $passes`] = "tran_result";
+		$passesS[`size $passesS`]="tran";
+		}
+	if (`checkBoxGrp -q -v2 zbw_passTranCBG`){
+		$passes[`size $passes`] = "tran_raw";
+		$passesS[`size $passesS`]="tranR";
+		}
+	if (`checkBoxGrp -q -v3 zbw_passTranCBG`){
+		$passes[`size $passes`] = "tran_level";
+		$passesS[`size $passesS`]="tranL";
+		}
+	if (`checkBoxGrp -q -v1 zbw_passIndirCBG`){
+		$passes[`size $passes`] = "indirect_result";
+		$passesS[`size $passesS`]="indir";
+		}
+	if (`checkBoxGrp -q -v2 zbw_passIndirCBG`){
+		$passes[`size $passes`] = "indirect_raw";
+		$passesS[`size $passesS`]="indirR";
+		}
+	if (`checkBoxGrp -q -v3 zbw_passIndirCBG`){
+		$passes[`size $passes`] = "indirect_post_ao";
+		$passesS[`size $passesS`]="indirPAO";
+		}	
+	if (`checkBoxGrp -q -v1 zbw_passOpacCBG`){
+		$passes[`size $passes`] = "opacity_result";
+		$passesS[`size $passesS`]="opac";
+		}
+	if (`checkBoxGrp -q -v2 zbw_passOpacCBG`){
+		$passes[`size $passes`] = "opacity_raw";
+		$passesS[`size $passesS`]="opacR";
+		}
+	if (`checkBoxGrp -q -v3 zbw_passOpacCBG`){
+		$passes[`size $passes`] = "opacity";
+		$passesS[`size $passesS`]="opacL";
+		}
+	if (`checkBoxGrp -q -v1 zbw_passAOCBG`){
+		$passes[`size $passes`] = "ao_raw";
+		$passesS[`size $passesS`]="aoR";
+		}
+	if (`checkBoxGrp -q -v2 zbw_passAOCBG`){
+		$passes[`size $passes`] = "add_result";
+		$passesS[`size $passesS`]="add";
+		}
+	//get size of number of passes
+	int $sizePasses= size($passes);
+
+////////////////////////////// Create frameBuffers and camOutPasses for each pass		
+	int $sizePasses = size($passes);
+	for ($c=0;$c<$sizePasses;$c++){
+		string $lsFB[]= `ls -type "mentalrayUserBuffer"`;
+		int $sizelsFB = (size($lsFB));
+		string $v="";
+		if ($c<10){
+			$v="0";
+			}
+		string $thisFB = ("FB"+$v+$c+"_"+ $passesS[$c]);
+		createNode mentalrayUserBuffer;
+		rename $thisFB;			
+		connectAttr -f ($thisFB+".message") miDefaultOptions.frameBufferList[$sizelsFB];
+		//grab values for depth for this FB
+		int $FBDepth = `radioButtonGrp -q -sl zbw_passDepthRBG`;
+		int $thisDepth;
+		switch ($FBDepth){
+			case 1:
+				$thisDepth = 8;
+				break;
+			case 2:
+				$thisDepth = 16;
+				break;
+			case 3:
+				$thisDepth = 32;
+				break;
+			}
+		//grab values for channels for this FB
+		int $FBChannels = `radioButtonGrp -q -sl zbw_passChannelRBG`;
+		int $thisChannels;
+		switch ($FBChannels){
+			case 1:
+				//rgb
+				$thisChannels = 1;
+				break;
+			case 2:
+				//rgba
+				$thisChannels = 2;
+				break;
+			}
+		//use if statements to set correct FB depth and channels
+		/*8 rgb=0
+		8 rgba=2
+		16 rgb=17
+		16 rgba=16
+		32 rgb=4
+		32 rgba=5
+		there are others, think about doing these as just a radiobutton group
+		*/
+		if ($thisDepth==8&&$thisChannels==1){
+			setAttr ($thisFB + ".dataType") 0;
+			}
+		if ($thisDepth==8&&$thisChannels==2){
+			setAttr ($thisFB + ".dataType") 2;	
+			}
+		if ($thisDepth==16&&$thisChannels==1){
+			setAttr ($thisFB + ".dataType") 17;	
+			}
+		if ($thisDepth==16&&$thisChannels==2){
+			setAttr ($thisFB + ".dataType") 16;	
+			}	
+		if ($thisDepth==32&&$thisChannels==1){
+			setAttr ($thisFB + ".dataType") 4;	
+			}
+		if ($thisDepth==32&&$thisChannels==2){
+			setAttr ($thisFB + ".dataType") 5;	
+			}
+		//this is the Output passes bit
+		string $ob[] = `ls -type "mentalrayOutputPass"`;
+		int $sizeOb = size($ob);
+		string $thisOut = ("Out"+$v+$c+"_"+$passesS[$c]);
+		createNode mentalrayOutputPass;
+		rename $thisOut;
+
+		connectAttr -f ($thisOut+".message") ($renderCam+".miOutputShaderList["+$sizeOb+"]");
+		connectAttr -f ($thisFB+".message") ($thisOut+".dataType");
+		//write to file bit checkbox in output pass
+		setAttr ($thisOut+".fileMode") 1;	
+		//what type of file?
+		int $fileType = (`radioButtonGrp -q -sl zbw_passFormatRBG`);
+		int $type;
+		switch ($fileType){
+			case 1:
+				$type=25;
+				break;
+			case 2:
+				$type=5;
+				break;
+			case 3:
+				$type=27;
+				break;					
+			}
+		/*
+		iff =25
+		tiff=5
+		exr=27
+		*/
+		setAttr ($thisOut+".fileFormat") $type;
+		//what file name? get from array above
+		int $combine = `checkBox -q -v zbw_passExrCB`;
+		string $exrName= `textFieldGrp -q -tx zbw_passExrnameTFG`;
+		if ($type==27&&$combine==1){
+			setAttr -type "string" ($thisOut+".fileName") $exrName;					
+			}
+		else {
+			//get pass name and put it in name slot		
+			setAttr -type "string" ($thisOut+".fileName") ($passesS[$c]);	
+			}
+
+		}
+///////////////Set up the shaders and create slots in SimplePasses, connect them
+	for ($thisMIA in $mia) {
+		if (`checkBox -q -v ("zbw_pass" + $thisMIA + "CB")`){	
+			string $thisSimple = ($thisMIA + "_simplePass");
+			string $thisSG = ($thisSimple + "SG");
+			mrCreateCustomNode -asShader "" simplePasses;
+			rename $thisSimple;
+			//find SG for this, rename
+			string $SGList[] = `lsType shadingEngine`;
+			int $SGnum = (`size($SGList)` - 2);
+			string $SG1 = ($SGList[$SGnum]);
+			rename $SG1 $thisSG;
+			//create slots in simple passes shader, connecting them - create frame buffers
+			for ($c=0; $c<$sizePasses;$c++){
+			connectAttr -f ($thisMIA+"."+$passes[$c]) ($thisSimple+".color["+$c+"]");
+			}	
+/////////////////////////////////////////////			
+		//put this shader onto each object with the orig mia material
+		select -cl;
+		string $miaSG[]=`listConnections -source true -type shadingEngine $thisMIA`;
+		hyperShade -objects $miaSG;
+		sets -e -forceElement $thisSG;
+		select -cl;
+		}
+//print ("This is" + $sizePasses);
+			
+		setAttr mentalrayGlobals.exportPostEffects 0;
+		
+	}
+	
+}
+
+global proc zbw_passOPRender()
+{
+	//get render layer
+	string $RLlong = `radioCollection -q -sl zbw_passLayersRC`;
+	int $sizeRL = (size($RLlong)-2);
+	string $RL = startString ($RLlong, $sizeRL);
+	string $passes[] = `ls -type "mentalrayOutputPass"`;
+	for ($rb in $passes){
+		editRenderLayerAdjustment -lyr $RL ($rb + ".renderable");
+		int $on = `checkBox -q -v ($rb + "CB")`;
+		setAttr ($rb + ".renderable") $on;	
+	}
+	
+}
+
+global proc zbw_passCheckOP()
+{
+string $thisRLlong = `radioCollection -q -sl zbw_passLayersRC`;
+int $sizeThisRLlong = (size ($thisRLlong)-2);
+string $thisRL = startString ($thisRLlong, $sizeThisRLlong);
+//change values of each renderlayer
+editRenderLayerGlobals -crl $thisRL;
+string $OP[] = `ls -type "mentalrayOutputPass"`;
+int $sizeOP = size($OP);
+for ($y=0;$y<$sizeOP; $y++){
+	//CHECK THESE VALUES PER RENDER LAYER? This needs to check if the boxes exist for that OutPass, then update them or create them
+	int $opOn = `getAttr ($OP[$y]+".renderable")`;
+	checkBox -e -v $opOn ($OP[$y] + "CB");
+	}
+}
+
+global proc zbw_passAddNew()
+{
+///get camera	
+string $camRC=`radioCollection -q -sl zbw_passNewCamRC`;
+int $sizeCamRC = (size($camRC)-2);
+string $renderCam = startString ($camRC, $sizeCamRC);
+//make new list for camera
+
+//get new pass name
+string $name = `textFieldGrp -q -tx zbw_passNewPassTFG`;
+string $lsFB[]= `ls -type "mentalrayUserBuffer"`;
+int $sizelsFB = (size($lsFB));
+string $v="";
+if ($sizelsFB<10){
+	$v="0";
+	}
+string $thisFB = ("FB"+$v+$sizelsFB+"_"+ $name);
+
+string $ob[] = `ls -type "mentalrayOutputPass"`;
+int $sizeOb = size($ob);
+string $f="";
+if ($sizeOb<10){
+$f="0";	
+}
+string $thisOut = ("Out"+$f+$sizeOb+"_"+$name);
+string $thisOP=$thisOut;
+
+//Make FB
+createNode mentalrayUserBuffer;
+rename ($thisFB);
+connectAttr -f ($thisFB+".message") miDefaultOptions.frameBufferList[$sizelsFB];
+
+int $FBDepth = `radioButtonGrp -q -sl zbw_passNewDepthRBG`;
+int $thisDepth;
+switch ($FBDepth){
+	case 1:
+		$thisDepth = 8;
+		break;
+	case 2:
+		$thisDepth = 16;
+		break;
+	case 3:
+		$thisDepth = 32;
+		break;
+	}
+//grab values for channels for this FB
+int $FBChannels = `radioButtonGrp -q -sl zbw_passNewChannelRBG`;
+int $thisChannels;
+switch ($FBChannels){
+	case 1:
+		//rgb
+		$thisChannels = 1;
+		break;
+	case 2:
+		//rgba
+		$thisChannels = 2;
+		break;
+	}
+if ($thisDepth==8&&$thisChannels==1){
+	setAttr ($thisFB + ".dataType") 0;
+	}
+if ($thisDepth==8&&$thisChannels==2){
+	setAttr ($thisFB + ".dataType") 2;	
+	}
+if ($thisDepth==16&&$thisChannels==1){
+	setAttr ($thisFB + ".dataType") 17;	
+	}
+if ($thisDepth==16&&$thisChannels==2){
+	setAttr ($thisFB + ".dataType") 16;	
+	}	
+if ($thisDepth==32&&$thisChannels==1){
+	setAttr ($thisFB + ".dataType") 4;	
+	}
+if ($thisDepth==32&&$thisChannels==2){
+	setAttr ($thisFB + ".dataType") 5;	
+	}
+
+int $fileType = (`radioButtonGrp -q -sl zbw_passFormatRBG`);
+		int $type;
+		switch ($fileType){
+			case 1:
+				$type=25;
+				break;
+			case 2:
+				$type=5;
+				break;
+			case 3:
+				$type=27;
+				break;					
+			}	
+	
+//make OP
+string $ob[]=`ls -type "mentalrayOutputPass"`;
+int $sizeob = size ($ob);
+createNode mentalrayOutputPass;
+rename ($thisOP);
+connectAttr -f ($thisOP+".message") ($renderCam +".miOutputShaderList["+$sizeob+"]");
+
+connectAttr -f ($thisFB+".message")($thisOP+".dataType");
+setAttr ($thisOP+".fileMode") 1;
+setAttr ($thisOP+".fileFormat") $type;
+setAttr -type "string" 	($thisOP+".fileName") ($name);
+//append to end of list of passes	
+zbw_passUpdatePass;	
+}
+
+global proc zbw_passUpdatePass()
+{
+//delete and refresh the textScrollList - zbw_passFBTSL;	
+textScrollList -e -ra zbw_passFBTSL;
+string $fb[]= `ls -type "mentalrayUserBuffer"`;
+int $sizefb = size ($fb);
+string $op[]=`ls -type "mentalrayOutputPass"`;
+int $sizeop = size ($op);
+if (!$sizefb){
+	textScrollList -e -a "none" zbw_passFBTSL;
+	}
+else {	
+	for ($a=0; $a<$sizefb;$a++){
+		string $cams[] = `listConnections -d 1 -s 0 $op[$a]`;
+		string $cam = $cams[0];
+		string $me = ($a +"     "+$fb[$a]+"    "+$op[$a] + "     "+$cam);
+		textScrollList -e -a $me zbw_passFBTSL;
+		}
+	}
+}
+
+global proc zbw_passUpdateRP()
+{
+			string $rls[] = `ls -type "renderLayer"`;
+			int $sizeRls = size ($rls);
+			for ($z=0;$z<$sizeRls;$z++){
+				radioButton -cc zbw_passCheckOP -label ($rls[$z]) ($rls[$z] + "RB");
+				}
+
+}
+
+zbw_renderPasses();

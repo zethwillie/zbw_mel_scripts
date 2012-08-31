@@ -1,0 +1,128 @@
+/*zbw_splitPlane
+by Zeth Willie
+Attaches the clipping plane to an object for rendering a split frame [FRONT/BACK] (in order to wrap or sandwich a shot or object in post, for example)
+Instructions--
+Select the object, then the camera - creates a distance dimension from the camera to the object pivot
+Use the group "(cam)ClipSplit_GRP" to toggle the near/far plane to the object, the default values are what it reverts to. Will grab your camera values as the defaults on creation
+To render both front and back, create render layers and then layer overrides on the ClipState attr on the group. one render layer is 1, one is 2
+*/
+
+global proc zbw_splitPlane()
+{
+string $sel[] = (`ls -sl`);
+int $selSize = size($sel);
+if ($selSize != 2) {
+	error "select DIVIDER then CAM to set clip plane split point";
+	}
+
+//check that $sel[0] is a transform obj
+string $obj = $sel[0];
+string $objCheck = (`objectType $sel[0]`);
+if ($objCheck != "transform"){
+error "the first selection needs to be a transformable object";
+}
+
+//check that $sel[1] is a camera
+//get cam shape name
+string $camTrans = $sel[1];
+select -r $camTrans;
+string $camTemp[] = (`pickWalk -d down`);
+string $cam = $camTemp[0];
+string $camCheck = `objectType $cam`;
+if ($camCheck != "camera"){
+error "the second selection needs to be a camera transform";
+}
+
+
+//get location of $obj/$cam
+string $rp = ".rotatePivot";
+vector $objPntLoc = (`pointPosition -w ($obj+$rp)`);
+vector $camPntLoc = (`pointPosition -w ($camTrans+$rp)`);
+
+//create distance node
+string $splitDistTrans = ($camTrans + "_splitDist");
+string $splitDist = ($splitDistTrans + "Shape");
+distanceDimension -sp ($camPntLoc.x) ($camPntLoc.y) ($camPntLoc.z) -ep ($objPntLoc.x) ($objPntLoc.y) ($objPntLoc.z);
+string $dimSel[] = `ls -sl`;
+select -cl;
+for ($i in $dimSel) {
+	string $objStrain = `objectType $i`;
+	if ($objStrain == "transform"){
+		select -add $i;
+		}		
+	}
+rename $splitDistTrans;
+
+//rename distance locators
+string $camLoc = $camTrans + "_distLoc";
+string $objLoc = $camTrans + "_objLoc";
+string $distConn[] = (`listConnections $splitDist`);
+select -r $distConn[0];
+rename $camLoc;
+select -r $distConn[1];
+rename $objLoc;
+
+//constrain locs to object and camera
+pointConstraint $camTrans $camLoc;
+pointConstraint $obj $objLoc;
+
+//create group with control for near/far
+select -cl;
+string $grpName = ($camTrans + "_setClipPlane");
+group -empty -n $grpName;
+addAttr -k 1 -h 0 -at long -ln Default_0;
+addAttr -k 1 -h 0 -at long -ln ClipFar_1;
+addAttr -k 1 -h 0 -at long -ln ClipNear_2;
+setAttr ($grpName + ".ClipNear_2") -l 1; 
+setAttr ( $grpName + ".ClipFar_1") -l 1; 
+setAttr ($grpName + ".Default_0") -l 1; 
+addAttr -k 1 -h 0 -dv 0 -at long -min 0 -max 2 -ln clipState;
+addAttr -k 1 -h 0 -at long -ln _____;
+setAttr ($grpName + "._____") -l 1;
+addAttr -k 1 -h 0 -at "float" -ln defaultNearClip;
+addAttr -k 1 -h 0 -at "float" -ln defaultFarClip;
+string $attr[] = {".tx", ".ty", ".tz", ".rx", ".ry", ".rz", ".sx", ".sy", ".sz", ".v" };
+for ($b in $attr) {
+string $this = $grpName + $b;
+setAttr $this -k 0;
+
+}
+
+//create two condition nodes
+string $farCond = ($camTrans + "_farCondition");
+string $nearCond = ($camTrans + "_nearCondition");
+shadingNode -asUtility condition -n $farCond;
+shadingNode -asUtility condition -n $nearCond;
+
+//get old clip planes
+float $oldNear = `getAttr ($cam + ".nearClipPlane")`;
+float $oldFar = `getAttr ($cam + ".farClipPlane")`;
+setAttr ($grpName + ".defaultNearClip") $oldNear;
+setAttr ($grpName + ".defaultFarClip") $oldFar;
+
+//setAttrs and connect attrs
+setAttr ($farCond + ".secondTerm") 1;
+setAttr ($nearCond + ".secondTerm") 2;
+connectAttr ($splitDist + ".distance") ($farCond + ".colorIfTrueR");
+connectAttr ($splitDist + ".distance") ($nearCond + ".colorIfTrueR");
+connectAttr ($grpName + ".clipState") ($farCond + ".firstTerm");
+connectAttr ($grpName + ".clipState") ($nearCond + ".firstTerm");
+connectAttr ($grpName + ".defaultFarClip") ($farCond + ".colorIfFalseR");
+connectAttr ($grpName + ".defaultNearClip") ($nearCond + ".colorIfFalseR");
+connectAttr ($farCond + ".outColorR") ($cam + ".farClipPlane");
+connectAttr ($nearCond + ".outColorR") ($cam + ".nearClipPlane");
+
+//cleanUp
+select -cl;
+select -add $camLoc;
+select -add $objLoc;
+select -add $splitDistTrans;
+group -n ($camTrans + "ClipSplit_GRP");
+
+
+
+}
+
+
+
+

@@ -1,0 +1,133 @@
+/*
+zbw_randomTransform
+script by Zeth Willie (williework.blogspot.com, zeth@catbuks.com)
+
+select a group of objects and run the script. Select which attr you want to affect and the value range. "relative" will move/rot/scale  the objects
+from their current position, unchecked these will be absolute values in world space.
+
+
+*/
+
+global proc zbw_randomTransform()
+{
+if (`window -exists zbw_randTransUI`)
+	{
+	deleteUI zbw_randTransUI;
+	windowPref -remove zbw_randTransUI;
+	}	
+	
+string $RTwindow = `window -mnb 1 -mxb 0 -tlb 1 -rtf 1 -title "zbw_randomTransform" zbw_randTransUI`;
+	columnLayout;
+		frameLayout -w 400 -label "options";
+			columnLayout;
+				checkBox -v 1 -label "Translation" translateCB;
+				checkBox -v 1 -label "Rotation" rotateCB;
+				checkBox -v 1 -label "Scale" scaleCB;
+				checkBox -v 1 -label "Relative (from existing  rot/transl)" relativeCB;
+				checkBox -v 1 -label "objectSpace translation (follows orientation)" localCB;
+				setParent;
+			setParent;
+		setParent;
+		frameLayout -w 400 -label "Translation";
+			columnLayout;
+				floatFieldGrp -numberOfFields 2 -label "Translate X Range" -value1 0 -value2 0 RTtransXTFG;
+				floatFieldGrp -numberOfFields 2 -label "Translate Y Range" -value1 0 -value2 0 RTtransYTFG;
+				floatFieldGrp -numberOfFields 2 -label "Translate Z Range" -value1 0 -value2 0 RTtransZTFG;
+				setParent;
+			setParent;
+		setParent;
+	
+		frameLayout -w 400 -label "Rotation";
+			columnLayout;
+				floatFieldGrp -numberOfFields 2 -label "Rotate X Range" -value1 0 -value2 0 RTrotXTFG;
+				floatFieldGrp -numberOfFields 2 -label "Rotate Y Range" -value1 0 -value2 0 RTrotYTFG;
+				floatFieldGrp -numberOfFields 2 -label "Rotate Z Range" -value1 0 -value2 0 RTrotZTFG;
+				setParent;
+			setParent;
+		setParent;
+
+		frameLayout -w 400 -label "Scale";
+			columnLayout;
+				floatFieldGrp -numberOfFields 2 -label "Scale X Range" -value1 1 -value2 1 RTscaleXTFG;
+				floatFieldGrp -numberOfFields 2 -label "Scale Y Range" -value1 1 -value2 1 RTscaleYTFG;
+				floatFieldGrp -numberOfFields 2 -label "Scale Z Range" -value1 1 -value2 1 RTscaleZTFG;
+				setParent;
+			setParent;
+		setParent;
+		
+		frameLayout -w 400 -label "Activate";
+			columnLayout;
+				button  -label "Do it!" -command zbw_randomRotTrans;
+showWindow $RTwindow;
+				
+}
+
+global proc zbw_randomRotTrans()
+{
+float $tx1 = `floatFieldGrp -q -value1 RTtransXTFG`;
+float $tx2 = `floatFieldGrp -q -value2 RTtransXTFG`;
+float $ty1 = `floatFieldGrp -q -value1 RTtransYTFG`;
+float $ty2 = `floatFieldGrp -q -value2 RTtransYTFG`;
+float $tz1 = `floatFieldGrp -q -value1 RTtransZTFG`;
+float $tz2 = `floatFieldGrp -q -value2 RTtransZTFG`;	
+
+float $rx1 = `floatFieldGrp -q -value1 RTrotXTFG`;
+float $rx2 = `floatFieldGrp -q -value2 RTrotXTFG`;
+float $ry1 = `floatFieldGrp -q -value1 RTrotYTFG`;
+float $ry2 = `floatFieldGrp -q -value2 RTrotYTFG`;
+float $rz1 = `floatFieldGrp -q -value1 RTrotZTFG`;
+float $rz2 = `floatFieldGrp -q -value2 RTrotZTFG`;	
+
+float $sx1 = `floatFieldGrp -q -value1 RTscaleXTFG`;
+float $sx2 = `floatFieldGrp -q -value2 RTscaleXTFG`;
+float $sy1 = `floatFieldGrp -q -value1 RTscaleYTFG`;
+float $sy2 = `floatFieldGrp -q -value2 RTscaleYTFG`;
+float $sz1 = `floatFieldGrp -q -value1 RTscaleZTFG`;
+float $sz2 = `floatFieldGrp -q -value2 RTscaleZTFG`;	
+
+string $rel = "-a";
+if (`checkBox -q -v relativeCB`) {
+	$rel = "-r";
+	}
+string $loc = "-ws";
+if (`checkBox -q -v localCB`){
+	$loc = "-os";
+}
+int $translate = `checkBox -q -v translateCB`;
+int $rotate = `checkBox -q -v rotateCB`;
+int $scale = `checkBox -q -v scaleCB`;
+
+string $sel[]= `ls -sl`;
+for ($a in $sel) {
+	//translate
+	if ($translate==1) {
+		float $randtx = `rand $tx1 $tx2`;
+		float $randty = `rand $ty1 $ty2`;
+		float $randtz = `rand $tz1 $tz2`;
+		
+		select -r $a;
+		move $rel $loc $randtx $randty $randtz;
+		}
+	if ($rotate==1) {
+		float $randrx = `rand $rx1 $rx2`;
+		float $randry = `rand $ry1 $ry2`;
+		float $randrz = `rand $rz1 $rz2`;
+		
+		select -r $a;
+		rotate $rel $randrx $randry $randrz;
+		}	
+	if ($scale==1){
+		float $randsx = `rand $sx1 $sx2`;
+		float $randsy = `rand $sy1 $sy2`;
+		float $randsz = `rand  $sz1 $sz2`;
+		
+		select  -r $a;
+		scale $rel $randsx $randsy $randsz;
+		}
+	}	
+
+select -cl;	
+	
+}
+
+zbw_randomTransform;

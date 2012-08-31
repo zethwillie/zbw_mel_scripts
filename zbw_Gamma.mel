@@ -1,0 +1,227 @@
+///////////////////////////
+//zbw_deGamma
+//only works on "color" inputs (or outcolor, diffuse, etc) Checks if there is already a gamma going
+//into the color node, skips that material if there's already one there. If not adds a gamma correct between outplug and
+//inplug of the "color" attribute
+//install in scripts dir, run with "zbw_gamma"
+//
+//zeth@catbuks.com
+//
+//////////////////////////
+
+global proc zbw_gamma()
+{
+if (`window -exists zbw_gammaUI`)
+	{
+	deleteUI zbw_gammaUI;
+	windowPref -remove zbw_gammaUI;
+	}
+	string $win =  `window -s 1 -rtf 1 -tb 1 -widthHeight 500 300 -title "zbw_gamma" zbw_gammaUI`;
+		string $tabs = `tabLayout -scr 1`;
+			string $tab1 = `columnLayout`;
+					columnLayout -w 500;
+					radioButtonGrp -nrb 2 -vr -sl 2 -l1 "All_Shdrs" -l2 "Selected_Shdrs" zbw_addWhichGammaRBG;
+					floatFieldGrp -nf 3 -l "gammaValue" -pre 3 -v1 0.455 -v2 0.455 -v3 0.455 zbw_addGammaFF;
+					string $addToGrab = "zbw_addGamma";
+					button -label "Add Gamma Nodes" -command ("zbw_shaderGrab(\""+$addToGrab+"\")");
+					text "Select materials you want to add gamma nodes to (or select all)";
+					text "Note: this only works on color type channels for now";
+					text "Note2: be careful that there aren't gamma nodes elsewhere in your shader tree";
+					text "       This is just looking at connections to color-ish attrs";
+					setParent..;
+				setParent..;
+	
+			string $tab2 = `columnLayout`;
+					columnLayout;
+					radioButtonGrp -nrb 2 -vr -sl 2 -l1 "All_Gammas" -l2 "Selected_Shdrs" zbw_adjWhichGammaRBG;
+					floatFieldGrp -nf 3 -l "gammaValue" -pre 3 -v1 1 -v2 1 -v3 1 zbw_adjGammaFF;
+					string $adjToGrab = "zbw_adjustGamma";
+					button -label "Adjust Gamma Nodes" -command ("zbw_shaderGrab(\""+$adjToGrab+"\")");
+					text "Select materials you want to adjust affiliated gamma correct nodes on (or select all)";
+					text "Note: select all will change all gamma correct nodes in the scene";
+					setParent..;
+				setParent..;
+			
+			string $tab3 = `columnLayout`;
+					columnLayout ;
+					radioButtonGrp -nrb 2 -vr -sl 2 -l1 "All_Gammas" -l2 "Selected_Shdrs" zbw_remWhichGammaRBG;
+					string $remToGrab = "zbw_removeGamma";
+					button -label "Remove Gamma Nodes" -command ("zbw_shaderGrab(\""+$remToGrab+"\")");
+					text "Select materials you want to remove gamma correct nodes on (or select all)";
+					text "Note: select all will remove all gamma correct nodes in the scene";
+					text "Note2: choosing selected will only remove gammas connected directly to color";
+					setParent..;
+				setParent..;
+	
+	tabLayout -edit 
+		-tabLabel $tab1 "Add"
+		-tabLabel $tab2 "Adjust"
+		-tabLabel $tab3 "Remove"
+		$tabs;
+	
+showWindow $win;	
+}
+
+/////////////////////////////////////
+global proc zbw_shaderGrab(string $passSelTo)
+{
+global int $whatShaders;
+if ($passSelTo=="zbw_addGamma"){
+	$whatShaders = `radioButtonGrp -q -sl zbw_addWhichGammaRBG`;
+	}
+if ($passSelTo=="zbw_adjustGamma"){
+	$whatShaders = `radioButtonGrp -q -sl zbw_adjWhichGammaRBG`;
+	}
+if ($passSelTo=="zbw_removeGamma"){
+	$whatShaders = `radioButtonGrp -q -sl zbw_remWhichGammaRBG`;
+	}	
+print ("selection is" + $whatShaders + "\n");
+global string $selShaders[];
+if ($whatShaders==1){
+	// if "all shaders" is the options grab all the shader and put them in $shaders[]
+	$selShaders = `ls -mat`;
+
+	}
+if ($whatShaders==2){
+	//otherwise grab the selected shaders
+	$selShaders = `ls -sl -mat`;
+	}
+string $passTo = ($passSelTo + "($selShaders)");
+
+eval ($passTo);
+
+}
+
+
+
+//////////////////////////
+global proc zbw_addGamma(string $shaders[])
+{
+//info from GUI
+float $addR = `floatFieldGrp -q -v1 zbw_addGammaFF`;
+float $addG = `floatFieldGrp -q -v2 zbw_addGammaFF`;
+float $addB = `floatFieldGrp -q -v3 zbw_addGammaFF`;
+
+string $color;
+global string $channel;
+
+for ($this in $shaders)
+{	
+	//clear color and channel vars?
+	$color = "";
+	$channel = "";
+	//determine type of shader for connection into color
+	if ((`objectType $this`== "lambert") || (`objectType $this`== "phong") || (`objectType $this`== "blinn") || (`objectType $this`== "anisotropic") || (`objectType $this`== "phongE")|| (`objectType $this` == "particleCloud")){
+		$channel = ".color";
+		}	
+    	if (`objectType $this`== "surfaceShader"){
+		$channel = ".outColor";
+		}
+	if ((`objectType $this`== "mia_material_x")||(`objectType $this`== "mia_material_x_passes") || (`objectType $this`== "mia_material")){
+		$channel = ".diffuse";	
+		}
+
+	//else print warning
+	if ($channel == "") {
+		warning ("can't determine color channel of " + $this + ". We'll skip that for now");
+		}
+	
+	//for $this, add the color channel to the object
+	if ($channel != "") {
+		string $color = ($this + $channel);
+		//name the potential gamma correct node that will be inserted
+		string $gamma = ($this + "_gammaCorrect");
+
+		if (`connectionInfo -isDestination $color`){
+ 			string $file1 = `connectionInfo -sourceFromDestination $color`;
+			string $fileBuf[];
+			tokenize $file1 "." $fileBuf;
+			string $file1Node = $fileBuf[0];
+			if ((`objectType $file1Node`) != "gammaCorrect"){
+    				disconnectAttr ($file1) $color;
+				//connect gamma node and change it's values
+				shadingNode -asUtility gammaCorrect -n $gamma;
+				setAttr ($gamma + ".gammaX") $addR;
+				setAttr ($gamma + ".gammaY") $addG;
+				setAttr ($gamma + ".gammaZ") $addB;
+				connectAttr -f $file1 ($gamma + ".value");
+				connectAttr -f ($gamma+".outValue") $color;
+				}
+
+			}
+		else{
+			//if there's no input . . .
+			//get the color value
+			float $red = `getAttr ($color + "R")`;
+			float $green = `getAttr ($color + "G")`;
+			float $blue = `getAttr ($color + "B")`;
+			
+			//create a ramp with one value 
+			string $ramp = $this + "Ramp";
+			shadingNode -asUtility ramp -n $ramp;
+			removeMultiInstance -break true ($ramp+".colorEntryList[1]");
+			removeMultiInstance -break true ($ramp+".colorEntryList[2]");
+			setAttr ($ramp + ".colorEntryList[0].color") -type double3 $red $green $blue; 
+			
+			//create a gamma,set values
+			shadingNode -asUtility gammaCorrect -n $gamma;
+			setAttr ($gamma + ".gammaX") $addR;
+			setAttr ($gamma + ".gammaY") $addG;
+			setAttr ($gamma + ".gammaZ") $addB;
+			//connect ramp to gamma, connect gamma to color value
+			connectAttr ($ramp + ".outColor") ($gamma + ".value");
+			connectAttr ($gamma + ".outValue") $color;
+			}
+
+		}
+	}
+select -cl;
+}
+
+///////////////////////
+global proc zbw_adjustGamma(string $shaders[])
+{
+
+//grab the values in the float field group
+float $addR = `floatFieldGrp -q -v1 zbw_adjGammaFF`;
+float $addG = `floatFieldGrp -q -v2 zbw_adjGammaFF`;
+float $addB = `floatFieldGrp -q -v3 zbw_adjGammaFF`;
+
+//iterate through materials selected
+for ($this in $shaders){
+	//////
+	//for later:
+	//dig down to get gamma nodes that are attached to material?
+	//see if there's a proc to grab all connections upstream of the shader node
+	//create a loop to pick the gamma (do this recursively, watch for loops!)
+	//////	
+	string $gams[] = `listConnections -s 1 -t gammaCorrect $this`;
+	for ($thisGam in $gams){
+		setAttr ($thisGam +".gammaX") $addR;
+		setAttr ($thisGam +".gammaY") $addG;
+		setAttr ($thisGam +".gammaZ") $addB;
+		}
+	}
+select -cl;
+}
+
+///////////////////
+global proc zbw_removeGamma(string $shaders[])
+{
+//iterate through the materials selected
+for ($this in $shaders){
+	//grab any associated gamma node
+	string $gams[] = `listConnections -s 1 -t gammaCorrect $this`;
+	for ($thisGam in $gams){
+		string $target[] = `connectionInfo -dfs ($thisGam+".outValue")`;
+		print $target;	
+		string $source = `connectionInfo -sfd ($thisGam+".value")`;
+		print $source;
+		connectAttr-f ($source) ($target[0]);
+		delete $thisGam;	                     
+		}
+	}
+select -cl;
+}
+
+zbw_gamma();

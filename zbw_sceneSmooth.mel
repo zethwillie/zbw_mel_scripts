@@ -1,0 +1,34 @@
+global proc zbw_sceneSmooth()
+	{
+	if (`window -exists zbw_GlobalSmooth`) deleteUI -window zbw_GlobalSmooth;
+	window zbw_GlobalSmooth;
+	columnLayout;
+	$myRadButs = `radioButtonGrp -numberOfRadioButtons 3 -label "Smooth Setting:" -labelArray3 "proxy" "med" "smooth" -select 2 radButtons`;
+	button -label "Do It." -command "zbwRadButVal()";
+	showWindow zbw_GlobalSmooth;
+	}
+
+global string $myRadButs = "";
+
+global proc zbwRadButVal()
+	{
+	global string $myRadButs;
+	float $butVal = `radioButtonGrp -q -select radButtons`;
+	zbw_doSmooth ($butVal);
+	//print $butVal;
+	}
+	
+
+global proc zbw_doSmooth (int $zbw_setSmooth) {
+	string $ctrl[]= `ls ("*Rig_Master_CTRL")`;
+	int $ctrlSize = size ($ctrl);
+	for ($i=0;$i<$ctrlSize;++$i){
+		string $thisCtrl = ($ctrl[$i] + ".DisplayLevel");
+		int $newVal = ($zbw_setSmooth - 1);	
+		setAttr $thisCtrl $newVal;
+		}
+	}
+	
+
+	
+zbw_sceneSmooth();
